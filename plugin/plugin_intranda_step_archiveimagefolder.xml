@@ -12,10 +12,15 @@
         <project>*</project>
         <step>*</step>
         
-        <!-- sample parameter -->
-        <value>test</value>
-        <!-- display button to finish the task directly from within the entered plugin -->
-        <allowTaskFinishButtons>true</allowTaskFinishButtons>
+        <!-- the folder to archive -->
+        <folder>master</folder>
+        <!-- delete local files after copying and close step -->
+        <deleteAndCloseAfterCopy>false</deleteAndCloseAfterCopy>
+        <method>
+            <name>SSH</name>
+            <host>bandspeicher.intranda.com</host>
+            <user>intranda</user>
+        </method>
     </config>
 
 </config_plugin>

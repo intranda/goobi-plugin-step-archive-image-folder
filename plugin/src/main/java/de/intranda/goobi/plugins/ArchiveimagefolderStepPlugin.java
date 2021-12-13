@@ -1,5 +1,11 @@
 package de.intranda.goobi.plugins;
 
+import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 /**
  * This file is part of a plugin for Goobi - a Workflow tool for the support of mass digitization.
  *
@@ -22,7 +28,9 @@ package de.intranda.goobi.plugins;
 import java.util.HashMap;
 
 import org.apache.commons.configuration.SubnodeConfiguration;
+import org.apache.commons.io.FileUtils;
 import org.goobi.beans.Step;
+import org.goobi.production.enums.LogType;
 import org.goobi.production.enums.PluginGuiType;
 import org.goobi.production.enums.PluginReturnValue;
 import org.goobi.production.enums.PluginType;
@@ -30,42 +38,50 @@ import org.goobi.production.enums.StepReturnValue;
 import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
 
 import de.sub.goobi.config.ConfigPlugins;
+import de.sub.goobi.helper.Helper;
+import de.sub.goobi.helper.exceptions.DAOException;
+import de.sub.goobi.helper.exceptions.SwapException;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
+import net.schmizz.sshj.SSHClient;
+import net.schmizz.sshj.sftp.SFTPClient;
+import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
 
 @PluginImplementation
 @Log4j2
 public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
-    
+
     @Getter
     private String title = "intranda_step_archiveimagefolder";
     @Getter
     private Step step;
-    @Getter
-    private String value;
-    @Getter 
-    private boolean allowTaskFinishButtons;
+    private String sshUser;
+    private String sshHost;
+    private boolean deleteAndCloseAfterCopy;
+    private String selectedImageFolder;
     private String returnPath;
 
     @Override
     public void initialize(Step step, String returnPath) {
         this.returnPath = returnPath;
         this.step = step;
-                
+
         // read parameters from correct block in configuration file
         SubnodeConfiguration myconfig = ConfigPlugins.getProjectAndStepConfig(title, step);
-        value = myconfig.getString("value", "default value"); 
-        allowTaskFinishButtons = myconfig.getBoolean("allowTaskFinishButtons", false);
+        sshUser = myconfig.getString("method/user", "intranda");
+        sshHost = myconfig.getString("method/host", "intranda");
+        selectedImageFolder = myconfig.getString("folder", "master");
+        deleteAndCloseAfterCopy = myconfig.getBoolean("deleteAndCloseAfterCopy", false);
         log.info("Archiveimagefolder step plugin initialized");
     }
 
     @Override
     public PluginGuiType getPluginGuiType() {
-        return PluginGuiType.FULL;
+        // return PluginGuiType.FULL;
         // return PluginGuiType.PART;
         // return PluginGuiType.PART_AND_FULL;
-        // return PluginGuiType.NONE;
+        return PluginGuiType.NONE;
     }
 
     @Override
@@ -87,7 +103,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
     public String finish() {
         return "/uii" + returnPath;
     }
-    
+
     @Override
     public int getInterfaceVersion() {
         return 0;
@@ -97,7 +113,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
     public HashMap<String, StepReturnValue> validate() {
         return null;
     }
-    
+
     @Override
     public boolean execute() {
         PluginReturnValue ret = run();
@@ -107,12 +123,43 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
     @Override
     public PluginReturnValue run() {
         boolean successful = true;
-        // your logic goes here
-        
+
+        Path localFolder = null;
+        try (SSHClient sshClient = initSSHClient(); SFTPClient sftpClient = sshClient.newSFTPClient();) {
+            localFolder = Paths.get(step.getProzess().getConfiguredImageFolder(selectedImageFolder));
+            String folderName = localFolder.getFileName().toString();
+            String remoteFolder = Paths.get(step.getProcessId().toString(), "images", folderName).toString();
+            sftpClient.mkdirs(remoteFolder);
+            try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(localFolder)) {
+                for (Path file : dirStream) {
+                    sftpClient.put(file.toAbsolutePath().toString(), remoteFolder + "/" + file.getFileName().toString());
+                }
+            }
+        } catch (IOException | InterruptedException | SwapException | DAOException e) {
+            log.error(e);
+            Helper.addMessageToProcessLog(step.getProcessId(), LogType.ERROR, "Error uploading files", title);
+            successful = false;
+        }
+
         log.info("Archiveimagefolder step plugin executed");
         if (!successful) {
             return PluginReturnValue.ERROR;
         }
-        return PluginReturnValue.FINISH;
+        if (deleteAndCloseAfterCopy) {
+            if (localFolder != null) {
+                FileUtils.deleteQuietly(localFolder.toFile());
+            }
+            return PluginReturnValue.FINISH;
+        }
+        return PluginReturnValue.WAIT;
+    }
+
+    private SSHClient initSSHClient() throws IOException {
+        SSHClient client = new SSHClient();
+        client.addHostKeyVerifier(new PromiscuousVerifier());
+
+        client.connect(sshHost);
+        client.authPublickey(sshUser);
+        return client;
     }
 }
