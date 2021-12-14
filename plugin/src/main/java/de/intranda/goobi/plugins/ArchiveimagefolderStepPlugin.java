@@ -27,7 +27,9 @@ import java.nio.file.Paths;
 
 import java.util.HashMap;
 
+import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.SubnodeConfiguration;
+import org.apache.commons.configuration.XMLConfiguration;
 import org.apache.commons.io.FileUtils;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.LogType;
@@ -61,6 +63,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
     private boolean deleteAndCloseAfterCopy;
     private String selectedImageFolder;
     private String returnPath;
+    private SubnodeConfiguration methodConfig;
 
     @Override
     public void initialize(Step step, String returnPath) {
@@ -73,6 +76,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
         sshHost = myconfig.getString("method/host", "intranda");
         selectedImageFolder = myconfig.getString("folder", "master");
         deleteAndCloseAfterCopy = myconfig.getBoolean("deleteAndCloseAfterCopy", false);
+        methodConfig = myconfig.configurationAt("method");
         log.info("Archiveimagefolder step plugin initialized");
     }
 
@@ -146,6 +150,15 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
             return PluginReturnValue.ERROR;
         }
         if (deleteAndCloseAfterCopy) {
+            //save the method config to the folder
+            XMLConfiguration xmlConf = new XMLConfiguration(methodConfig);
+            try {
+                xmlConf.save(localFolder.getParent().resolve(localFolder.getFileName().toString() + ".xml").toFile());
+            } catch (ConfigurationException e) {
+                log.error(e);
+                Helper.addMessageToProcessLog(step.getProcessId(), LogType.ERROR, "Error saving archive information to images folder", title);
+                return PluginReturnValue.ERROR;
+            }
             if (localFolder != null) {
                 FileUtils.deleteQuietly(localFolder.toFile());
             }
