@@ -129,6 +129,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
         boolean successful = true;
 
         Path localFolder = null;
+        int uploadedFiles = 0;
         try (SSHClient sshClient = initSSHClient(); SFTPClient sftpClient = sshClient.newSFTPClient();) {
             localFolder = Paths.get(step.getProzess().getConfiguredImageFolder(selectedImageFolder));
             String folderName = localFolder.getFileName().toString();
@@ -137,6 +138,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
             try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(localFolder)) {
                 for (Path file : dirStream) {
                     sftpClient.put(file.toAbsolutePath().toString(), remoteFolder + "/" + file.getFileName().toString());
+                    uploadedFiles++;
                 }
             }
         } catch (IOException | InterruptedException | SwapException | DAOException e) {
@@ -151,6 +153,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
         }
         if (deleteAndCloseAfterCopy) {
             //save the method config to the folder
+            methodConfig.setProperty("numberOfImages", uploadedFiles);
             XMLConfiguration xmlConf = new XMLConfiguration(methodConfig);
             try {
                 xmlConf.save(localFolder.getParent().resolve(localFolder.getFileName().toString() + ".xml").toFile());
