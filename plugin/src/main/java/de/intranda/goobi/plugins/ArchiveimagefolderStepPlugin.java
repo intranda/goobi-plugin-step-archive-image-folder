@@ -59,6 +59,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
     @Getter
     private Step step;
     private String sshUser;
+    private String privateKeyLocation;
     private String sshHost;
     private boolean deleteAndCloseAfterCopy;
     private String selectedImageFolder;
@@ -73,6 +74,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
         // read parameters from correct block in configuration file
         SubnodeConfiguration myconfig = ConfigPlugins.getProjectAndStepConfig(title, step);
         sshUser = myconfig.getString("method/user", "intranda");
+        privateKeyLocation = myconfig.getString("method/privateKeyLocation");
         sshHost = myconfig.getString("method/host", "intranda");
         selectedImageFolder = myconfig.getString("folder", "master");
         deleteAndCloseAfterCopy = myconfig.getBoolean("deleteAndCloseAfterCopy", false);
@@ -175,7 +177,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
         client.addHostKeyVerifier(new PromiscuousVerifier());
 
         client.connect(sshHost);
-        client.authPublickey(sshUser);
+        client.authPublickey(sshUser, privateKeyLocation);
         return client;
     }
 }
