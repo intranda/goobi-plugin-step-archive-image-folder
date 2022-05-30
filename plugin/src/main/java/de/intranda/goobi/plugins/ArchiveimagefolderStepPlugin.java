@@ -48,6 +48,7 @@ import lombok.extern.log4j.Log4j2;
 import net.schmizz.sshj.SSHClient;
 import net.schmizz.sshj.sftp.SFTPClient;
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
+import net.schmizz.sshj.userauth.keyprovider.*;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
 
 @PluginImplementation
@@ -60,6 +61,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
     private Step step;
     private String sshUser;
     private String privateKeyLocation;
+    private String privateKeyPassphrase;
     private String sshHost;
     private boolean deleteAndCloseAfterCopy;
     private String selectedImageFolder;
@@ -75,6 +77,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
         SubnodeConfiguration myconfig = ConfigPlugins.getProjectAndStepConfig(title, step);
         sshUser = myconfig.getString("method/user", "intranda");
         privateKeyLocation = myconfig.getString("method/privateKeyLocation");
+	privateKeyPassphrase = myconfig.getString("method/privateKeyPassphrase");
         sshHost = myconfig.getString("method/host", "intranda");
         selectedImageFolder = myconfig.getString("folder", "master");
         deleteAndCloseAfterCopy = myconfig.getBoolean("deleteAndCloseAfterCopy", false);
@@ -177,7 +180,13 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
         client.addHostKeyVerifier(new PromiscuousVerifier());
 
         client.connect(sshHost);
-        client.authPublickey(sshUser, privateKeyLocation);
+        try {
+            KeyProvider kp = client.loadKeys(privateKeyLocation, privateKeyPassphrase);
+            client.authPublickey(sshUser, kp);
+        } catch (net.schmizz.sshj.userauth.UserAuthException e) {
+            log.error(e);
+        }
+
         return client;
     }
 }
