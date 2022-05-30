@@ -20,7 +20,8 @@
             <name>SSH</name>
             <host>bandspeicher.intranda.com</host>
             <user>intranda</user>
-            <privateKeyLocation>/home/myuser/.ssh/id_rsa</privateKeyLocation>
+            <privateKeyLocation>CHANGE_ME</privateKeyLocation>
+            <privateKeyPassphrase>CHANGE_ME</privateKeyPassphrase>
         </method>
     </config>
 
