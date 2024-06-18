@@ -19,9 +19,11 @@
         <method>
             <name>SSH</name>
             <host>bandspeicher.intranda.com</host>
+            <port>22</port>
             <user>intranda</user>
             <privateKeyLocation>CHANGE_ME</privateKeyLocation>
             <privateKeyPassphrase>CHANGE_ME</privateKeyPassphrase>
+            <knownHostsFile>~/.ssh/known_hosts</knownHostsFile>
         </method>
     </config>
 

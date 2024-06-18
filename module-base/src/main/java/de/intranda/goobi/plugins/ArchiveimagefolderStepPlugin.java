@@ -43,12 +43,9 @@ import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
+import io.goobi.workflow.api.connection.SftpUtils;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
-import net.schmizz.sshj.SSHClient;
-import net.schmizz.sshj.sftp.SFTPClient;
-import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
-import net.schmizz.sshj.userauth.keyprovider.KeyProvider;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
 
 @PluginImplementation
@@ -65,6 +62,8 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
     private String privateKeyLocation;
     private String privateKeyPassphrase;
     private String sshHost;
+    private String knownHostsFile;
+    private int port;
     private boolean deleteAndCloseAfterCopy;
     private String selectedImageFolder;
     private String returnPath;
@@ -81,10 +80,11 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
         privateKeyLocation = myconfig.getString("method/privateKeyLocation");
         privateKeyPassphrase = myconfig.getString("method/privateKeyPassphrase");
         sshHost = myconfig.getString("method/host", "intranda");
+        port = myconfig.getInt("method/port", 22);
+        knownHostsFile = myconfig.getString("method/knownHostsFile");
         selectedImageFolder = myconfig.getString("folder", "master");
         deleteAndCloseAfterCopy = myconfig.getBoolean("deleteAndCloseAfterCopy", false);
         methodConfig = myconfig.configurationAt("method");
-        log.info("Archiveimagefolder step plugin initialized");
     }
 
     @Override
@@ -134,14 +134,15 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
 
         Path localFolder = null;
         int uploadedFiles = 0;
-        try (SSHClient sshClient = initSSHClient(); SFTPClient sftpClient = sshClient.newSFTPClient();) {
+        try (SftpUtils sftpClient = new SftpUtils(sshUser, privateKeyLocation, privateKeyPassphrase, sshHost, port, knownHostsFile)) {
+
             localFolder = Paths.get(step.getProzess().getConfiguredImageFolder(selectedImageFolder));
             String folderName = localFolder.getFileName().toString();
             String remoteFolder = Paths.get(step.getProcessId().toString(), "images", folderName).toString();
-            sftpClient.mkdirs(remoteFolder);
+            sftpClient.createSubFolder(remoteFolder);
             try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(localFolder)) {
                 for (Path file : dirStream) {
-                    sftpClient.put(file.toAbsolutePath().toString(), remoteFolder + "/" + file.getFileName().toString());
+                    sftpClient.uploadFile(file);
                     uploadedFiles++;
                 }
             }
@@ -151,7 +152,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
             successful = false;
         }
 
-        log.info("Archiveimagefolder step plugin executed");
+        log.debug("Archiveimagefolder step plugin executed");
         if (!successful) {
             return PluginReturnValue.ERROR;
         }
@@ -172,20 +173,5 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
             return PluginReturnValue.FINISH;
         }
         return PluginReturnValue.WAIT;
-    }
-
-    private SSHClient initSSHClient() throws IOException {
-        SSHClient client = new SSHClient();
-        client.addHostKeyVerifier(new PromiscuousVerifier());
-
-        client.connect(sshHost);
-        try {
-            KeyProvider kp = client.loadKeys(privateKeyLocation, privateKeyPassphrase);
-            client.authPublickey(sshUser, kp);
-        } catch (net.schmizz.sshj.userauth.UserAuthException e) {
-            log.error(e);
-        }
-
-        return client;
     }
 }
