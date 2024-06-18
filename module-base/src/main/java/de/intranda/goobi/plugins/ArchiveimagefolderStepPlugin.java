@@ -55,6 +55,8 @@ import net.xeoh.plugins.base.annotations.PluginImplementation;
 @Log4j2
 public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
 
+    private static final long serialVersionUID = -2122931823980518591L;
+
     @Getter
     private String title = "intranda_step_archiveimagefolder";
     @Getter
@@ -87,9 +89,6 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
 
     @Override
     public PluginGuiType getPluginGuiType() {
-        // return PluginGuiType.FULL;
-        // return PluginGuiType.PART;
-        // return PluginGuiType.PART_AND_FULL;
         return PluginGuiType.NONE;
     }
 
@@ -120,7 +119,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
 
     @Override
     public HashMap<String, StepReturnValue> validate() {
-        return null;
+        return null; //NOSONAR
     }
 
     @Override
@@ -148,7 +147,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
             }
         } catch (IOException | SwapException | DAOException e) {
             log.error(e);
-            Helper.addMessageToProcessLog(step.getProcessId(), LogType.ERROR, "Error uploading files", title);
+            Helper.addMessageToProcessJournal(step.getProcessId(), LogType.ERROR, "Error uploading files", title);
             successful = false;
         }
 
@@ -164,7 +163,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
                 xmlConf.save(localFolder.getParent().resolve(localFolder.getFileName().toString() + ".xml").toFile());
             } catch (ConfigurationException e) {
                 log.error(e);
-                Helper.addMessageToProcessLog(step.getProcessId(), LogType.ERROR, "Error saving archive information to images folder", title);
+                Helper.addMessageToProcessJournal(step.getProcessId(), LogType.ERROR, "Error saving archive information to images folder", title);
                 return PluginReturnValue.ERROR;
             }
             if (localFolder != null) {
