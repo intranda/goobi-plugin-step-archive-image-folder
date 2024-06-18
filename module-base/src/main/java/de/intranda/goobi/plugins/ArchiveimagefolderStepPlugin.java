@@ -139,7 +139,11 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
             localFolder = Paths.get(step.getProzess().getConfiguredImageFolder(selectedImageFolder));
             String folderName = localFolder.getFileName().toString();
             String remoteFolder = Paths.get(step.getProcessId().toString(), "images", folderName).toString();
-            sftpClient.createSubFolder(remoteFolder);
+            String[] folder = remoteFolder.split("/");
+            for (String f : folder) {
+                sftpClient.createSubFolder(f);
+                sftpClient.changeRemoteFolder(f);
+            }
             try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(localFolder)) {
                 for (Path file : dirStream) {
                     sftpClient.uploadFile(file);
