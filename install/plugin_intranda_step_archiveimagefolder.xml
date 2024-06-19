@@ -10,7 +10,7 @@
     <config>
         <!-- which projects to use for (can be more then one, otherwise use *) -->
         <project>*</project>
-        <step>*</step>
+        <step>Upload with SSH/SFTP</step>
         
         <!-- the folder to archive -->
         <folder>master</folder>
@@ -26,5 +26,26 @@
             <knownHostsFile>~/.ssh/known_hosts</knownHostsFile>
         </method>
     </config>
+
+
+    <config>
+        <!-- which projects to use for (can be more then one, otherwise use *) -->
+        <project>*</project>
+        <step>Upload to S3</step>
+        
+        <!-- the folder to archive -->
+        <folder>master</folder>
+        <!-- delete local files after copying and close step -->
+        <deleteAndCloseAfterCopy>false</deleteAndCloseAfterCopy>
+        <method>
+            <name>s3</name>
+            <S3Endpoint>http://s3.intranda.com:9000</S3Endpoint>
+            <S3Bucket>workflow-upload-testing</S3Bucket>
+            <S3Prefix>optional_additional_prefix</S3Prefix>
+            <S3AccessKeyID>CHANGE_ME</S3AccessKeyID>
+            <S3SecretAccessKey>CHANGE_ME</S3SecretAccessKey>
+        </method>
+    </config>
+
 
 </config_plugin>
