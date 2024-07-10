@@ -43,30 +43,43 @@ import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
+import io.goobi.extension.S3ClientHelper;
+import io.goobi.workflow.api.connection.SftpUtils;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
-import net.schmizz.sshj.SSHClient;
-import net.schmizz.sshj.sftp.SFTPClient;
-import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
-import net.schmizz.sshj.userauth.keyprovider.KeyProvider;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
 
 @PluginImplementation
 @Log4j2
 public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
 
+    private static final long serialVersionUID = -2122931823980518591L;
+
     @Getter
     private String title = "intranda_step_archiveimagefolder";
     @Getter
     private Step step;
+
+    private String protocol;
+
+    // sftp connection details
     private String sshUser;
     private String privateKeyLocation;
     private String privateKeyPassphrase;
     private String sshHost;
+    private String knownHostsFile;
+    private int port;
     private boolean deleteAndCloseAfterCopy;
     private String selectedImageFolder;
     private String returnPath;
     private SubnodeConfiguration methodConfig;
+
+    // s3 connection details
+    private String s3Endpoint;
+    private String s3Prefix;
+    private String s3bucket;
+    private String s3AccessKeyID;
+    private String s3SecretAccessKey;
 
     @Override
     public void initialize(Step step, String returnPath) {
@@ -75,21 +88,28 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
 
         // read parameters from correct block in configuration file
         SubnodeConfiguration myconfig = ConfigPlugins.getProjectAndStepConfig(title, step);
-        sshUser = myconfig.getString("method/user", "intranda");
-        privateKeyLocation = myconfig.getString("method/privateKeyLocation");
-        privateKeyPassphrase = myconfig.getString("method/privateKeyPassphrase");
-        sshHost = myconfig.getString("method/host", "intranda");
+        protocol = myconfig.getString("method/name", "SSH");
+        if ("s3".equalsIgnoreCase(protocol)) {
+            s3Endpoint = myconfig.getString("method/S3Endpoint");
+            s3bucket = myconfig.getString("method/S3Bucket");
+            s3Prefix = myconfig.getString("method/S3Prefix", "");
+            s3AccessKeyID = myconfig.getString("method/S3AccessKeyID");
+            s3SecretAccessKey = myconfig.getString("method/S3SecretAccessKey");
+        } else {
+            sshUser = myconfig.getString("method/user", "intranda");
+            privateKeyLocation = myconfig.getString("method/privateKeyLocation");
+            privateKeyPassphrase = myconfig.getString("method/privateKeyPassphrase");
+            sshHost = myconfig.getString("method/host", "intranda");
+            port = myconfig.getInt("method/port", 22);
+            knownHostsFile = myconfig.getString("method/knownHostsFile");
+        }
         selectedImageFolder = myconfig.getString("folder", "master");
         deleteAndCloseAfterCopy = myconfig.getBoolean("deleteAndCloseAfterCopy", false);
         methodConfig = myconfig.configurationAt("method");
-        log.info("Archiveimagefolder step plugin initialized");
     }
 
     @Override
     public PluginGuiType getPluginGuiType() {
-        // return PluginGuiType.FULL;
-        // return PluginGuiType.PART;
-        // return PluginGuiType.PART_AND_FULL;
         return PluginGuiType.NONE;
     }
 
@@ -120,7 +140,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
 
     @Override
     public HashMap<String, StepReturnValue> validate() {
-        return null;
+        return null; //NOSONAR
     }
 
     @Override
@@ -135,24 +155,45 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
 
         Path localFolder = null;
         int uploadedFiles = 0;
-        try (SSHClient sshClient = initSSHClient(); SFTPClient sftpClient = sshClient.newSFTPClient();) {
-            localFolder = Paths.get(step.getProzess().getConfiguredImageFolder(selectedImageFolder));
-            String folderName = localFolder.getFileName().toString();
-            String remoteFolder = Paths.get(step.getProcessId().toString(), "images", folderName).toString();
-            sftpClient.mkdirs(remoteFolder);
-            try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(localFolder)) {
-                for (Path file : dirStream) {
-                    sftpClient.put(file.toAbsolutePath().toString(), remoteFolder + "/" + file.getFileName().toString());
-                    uploadedFiles++;
+        if ("s3".equalsIgnoreCase(protocol)) {
+            try (S3ClientHelper s3client = new S3ClientHelper(s3Endpoint, s3AccessKeyID, s3SecretAccessKey)) {
+                localFolder = Paths.get(step.getProzess().getConfiguredImageFolder(selectedImageFolder));
+                String folderName = localFolder.getFileName().toString();
+                String remoteFolder = Paths.get(s3Prefix, step.getProcessId().toString(), "images", folderName).toString();
+                try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(localFolder)) {
+                    for (Path file : dirStream) {
+                        s3client.uploadSingleFile(s3bucket, remoteFolder, file);
+                        uploadedFiles++;
+                    }
                 }
+            } catch (Exception e) {
+                log.error(e);
+                Helper.addMessageToProcessJournal(step.getProcessId(), LogType.ERROR, "Error uploading files", title);
+                successful = false;
             }
-        } catch (IOException | SwapException | DAOException e) {
-            log.error(e);
-            Helper.addMessageToProcessLog(step.getProcessId(), LogType.ERROR, "Error uploading files", title);
-            successful = false;
+        } else {
+            try (SftpUtils sftpClient = new SftpUtils(sshUser, privateKeyLocation, privateKeyPassphrase, sshHost, port, knownHostsFile)) {
+                localFolder = Paths.get(step.getProzess().getConfiguredImageFolder(selectedImageFolder));
+                String folderName = localFolder.getFileName().toString();
+                String remoteFolder = Paths.get(step.getProcessId().toString(), "images", folderName).toString();
+                String[] folder = remoteFolder.split("/");
+                for (String f : folder) {
+                    sftpClient.createSubFolder(f);
+                    sftpClient.changeRemoteFolder(f);
+                }
+                try (DirectoryStream<Path> dirStream = Files.newDirectoryStream(localFolder)) {
+                    for (Path file : dirStream) {
+                        sftpClient.uploadFile(file);
+                        uploadedFiles++;
+                    }
+                }
+            } catch (IOException | SwapException | DAOException e) {
+                log.error(e);
+                Helper.addMessageToProcessJournal(step.getProcessId(), LogType.ERROR, "Error uploading files", title);
+                successful = false;
+            }
         }
-
-        log.info("Archiveimagefolder step plugin executed");
+        log.debug("Archiveimagefolder step plugin executed");
         if (!successful) {
             return PluginReturnValue.ERROR;
         }
@@ -164,7 +205,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
                 xmlConf.save(localFolder.getParent().resolve(localFolder.getFileName().toString() + ".xml").toFile());
             } catch (ConfigurationException e) {
                 log.error(e);
-                Helper.addMessageToProcessLog(step.getProcessId(), LogType.ERROR, "Error saving archive information to images folder", title);
+                Helper.addMessageToProcessJournal(step.getProcessId(), LogType.ERROR, "Error saving archive information to images folder", title);
                 return PluginReturnValue.ERROR;
             }
             if (localFolder != null) {
@@ -173,20 +214,5 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
             return PluginReturnValue.FINISH;
         }
         return PluginReturnValue.WAIT;
-    }
-
-    private SSHClient initSSHClient() throws IOException {
-        SSHClient client = new SSHClient();
-        client.addHostKeyVerifier(new PromiscuousVerifier());
-
-        client.connect(sshHost);
-        try {
-            KeyProvider kp = client.loadKeys(privateKeyLocation, privateKeyPassphrase);
-            client.authPublickey(sshUser, kp);
-        } catch (net.schmizz.sshj.userauth.UserAuthException e) {
-            log.error(e);
-        }
-
-        return client;
     }
 }
