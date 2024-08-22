@@ -156,7 +156,7 @@ public class ArchiveimagefolderStepPlugin implements IStepPluginVersion2 {
         Path localFolder = null;
         int uploadedFiles = 0;
         if ("s3".equalsIgnoreCase(protocol)) {
-            try (S3ClientHelper s3client = new S3ClientHelper(s3Endpoint, s3AccessKeyID, s3SecretAccessKey)) {
+            try (S3ClientHelper s3client = new S3ClientHelper(s3Endpoint, s3AccessKeyID, s3SecretAccessKey, true)) {
                 localFolder = Paths.get(step.getProzess().getConfiguredImageFolder(selectedImageFolder));
                 String folderName = localFolder.getFileName().toString();
                 String remoteFolder = Paths.get(s3Prefix, step.getProcessId().toString(), "images", folderName).toString();
