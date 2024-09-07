@@ -5,7 +5,7 @@ published: true
 description: Goobi Step Plugin for copying image folders to external storage
 ---
 ## Introduction
-This step plugin for Goobi workflow copies image folders to an external storage connected via sftp (ssh) and creates a file that causes Goobi workflow to display a warning in the task. The warning is displayed in the task details and in the metadata editor.
+This step plugin for Goobi workflow copies image folders to an external storage connected via sftp (ssh) and creates a file that causes Goobi workflow to display a warning in the task. The warning is displayed in the task details and in the metadata editor. As an alternative to sftp, an s3 bucket can also be used.
 
 
 ## Installation
@@ -33,7 +33,7 @@ To put the plugin into operation, it must be activated for one or more desired a
 
 ![Integration of the plugin into the workflow](screen1_en.png)
 
-The plugin copies the files from the configured folder to the SSH server, writes an XML file with the info where the files are located to the operation folder and then (if so configured) deletes the images on the Goobi storage and closes the step.
+The plugin copies the files from the configured folder to the SSH server or the S3 bucket, writes an XML file with the info where the files are located to the operation folder and then (if so configured) deletes the images on the Goobi storage and closes the step.
 
 The images can be restored afterwards with the plugin `goobi-plugin-administration-restorearchivedimagefolder`.
 
@@ -68,9 +68,27 @@ The configuration of the plugin is done via the configuration file `plugin_intra
         </method>
     </config>
 
+    <config>
+        <project>*</project>
+        <step>Copy to S3 storage</step>
+        <folder>media</folder>
+        <deleteAndCloseAfterCopy>false</deleteAndCloseAfterCopy>
+        <method>
+            <name>s3</name>
+            <S3Endpoint>http://127.0.0.1:9000</S3Endpoint>
+            <S3Bucket>storage-bucket</S3Bucket>
+            <S3Prefix>archive</S3Prefix>
+            <S3AccessKeyID>CHANGEME</S3AccessKeyID>
+            <S3SecretAccessKey>CHANGEME</S3SecretAccessKey>
+        </method>
+    </config>
+
 </config_plugin>
 ```
 
-For authentication on the ssh server, public keys are searched for in the usual places (`$USER_HOME/.ssh`). Other authentication methods such as username/password are not yet provided.  
+For authentication on the ssh server, public keys are searched for in the usual places (`$USER_HOME/.ssh`). Other authentication methods such as username/password are not yet provided.
+
+When using s3, the s3 endpoint and the bucket name to be used must be specified. Optionally, a prefix can be set if archiving is not to take place directly in the root of the bucket. S3AccessKeyID and S3SecretAccessKey contain the credentials to access the bucket.
+
 The setting `<deleteAndCloseAfterCopy>false</deleteAndCloseAfterCopy>` is intended for the case that the files on the SSH server are first stored in a buffer and then written to a tape. In this case, the step can remain open and be closed by a callback of the tape storage system. The callback has not yet been implemented for any tape storage, but can be mapped using the standard Goobi workflow REST API.
 
