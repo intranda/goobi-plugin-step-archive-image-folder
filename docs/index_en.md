@@ -3,6 +3,10 @@ title: Archiving image folders
 identifier: intranda_step_archiveimagefolder
 published: true
 description: Goobi Step Plugin for copying image folders to external storage
+keywords:
+    - Goobi workflow
+    - Plugin
+    - Step Plugin
 ---
 ## Introduction
 This step plugin for Goobi workflow copies image folders to an external storage connected via sftp (ssh) and creates a file that causes Goobi workflow to display a warning in the task. The warning is displayed in the task details and in the metadata editor. As an alternative to sftp, an s3 bucket can also be used.
